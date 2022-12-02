@@ -761,8 +761,8 @@ namespace UnityEngine.InputSystem
         // Having a higher value here also obsoletes the need for custom press points on stick buttons
         // (the up/down/left/right ones).
         [Min(ButtonControl.kMinButtonPressPoint)]
-        [SerializeField] private float m_DefaultButtonPressPoint = 0.5f;
-        [SerializeField] private float m_ButtonReleaseThreshold = 0.75f;
+        [SerializeField] private float m_DefaultButtonPressPoint = 0.125f;
+        [SerializeField] private float m_ButtonReleaseThreshold = 1.0f;
         [SerializeField] private float m_DefaultTapTime = 0.2f;
         [SerializeField] private float m_DefaultSlowTapTime = 0.5f;
         [SerializeField] private float m_DefaultHoldTime = 0.4f;
