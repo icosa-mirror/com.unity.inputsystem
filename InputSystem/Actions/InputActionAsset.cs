@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine.InputSystem.Utilities;
 
 ////TODO: make the FindAction logic available on any IEnumerable<InputAction> and IInputActionCollection via extension methods
@@ -83,6 +82,8 @@ namespace UnityEngine.InputSystem
         /// InputActionAssets.
         /// </remarks>
         public const string Extension = "inputactions";
+        ////REVIEW: actually pre-populate with some stuff?
+        internal const string kDefaultAssetLayoutJson = "{}";
 
         /// <summary>
         /// True if any action in the asset is currently enabled.
@@ -295,14 +296,12 @@ namespace UnityEngine.InputSystem
         /// <seealso cref="FromJson"/>
         public string ToJson()
         {
-            var fileJson = new WriteFileJson
+            return JsonUtility.ToJson(new WriteFileJson
             {
                 name = name,
                 maps = InputActionMap.WriteFileJson.FromMaps(m_ActionMaps).maps,
                 controlSchemes = InputControlScheme.SchemeJson.ToJson(m_ControlSchemes),
-            };
-
-            return JsonUtility.ToJson(fileJson, true);
+            }, true);
         }
 
         /// <summary>
@@ -872,6 +871,11 @@ namespace UnityEngine.InputSystem
 #endif
         }
 
+        internal bool IsEmpty()
+        {
+            return actionMaps.Count == 0 && controlSchemes.Count == 0;
+        }
+
         internal void OnWantToChangeSetup()
         {
             if (m_ActionMaps.LengthSafe() > 0)
@@ -921,6 +925,9 @@ namespace UnityEngine.InputSystem
 
         [SerializeField] internal InputActionMap[] m_ActionMaps;
         [SerializeField] internal InputControlScheme[] m_ControlSchemes;
+        #if UNITY_INPUT_SYSTEM_PROJECT_WIDE_ACTIONS
+        [SerializeField] internal bool m_IsProjectWide;
+        #endif
 
         ////TODO: make this persistent across domain reloads
         /// <summary>
@@ -937,6 +944,13 @@ namespace UnityEngine.InputSystem
         internal struct WriteFileJson
         {
             public string name;
+            public InputActionMap.WriteMapJson[] maps;
+            public InputControlScheme.SchemeJson[] controlSchemes;
+        }
+
+        [Serializable]
+        internal struct WriteFileJsonNoName
+        {
             public InputActionMap.WriteMapJson[] maps;
             public InputControlScheme.SchemeJson[] controlSchemes;
         }

@@ -1,4 +1,4 @@
-#if UNITY_EDITOR && UNITY_INPUT_SYSTEM_UI_TK_ASSET_EDITOR
+#if UNITY_EDITOR && UNITY_INPUT_SYSTEM_PROJECT_WIDE_ACTIONS
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,7 +9,6 @@ namespace UnityEngine.InputSystem.Editor
 {
     internal class CompositePartBindingPropertiesView : ViewBase<CompositePartBindingPropertiesView.ViewState>
     {
-        private readonly VisualElement m_Root;
         private readonly DropdownField m_CompositePartField;
         private readonly IMGUIContainer m_PathEditorContainer;
 
@@ -18,12 +17,11 @@ namespace UnityEngine.InputSystem.Editor
             InputActionsEditorConstants.CompositePartBindingPropertiesViewUxml;
 
         public CompositePartBindingPropertiesView(VisualElement root, StateContainer stateContainer)
-            : base(stateContainer)
+            : base(root, stateContainer)
         {
-            m_Root = root;
             var visualTreeAsset = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(UxmlName);
             var container = visualTreeAsset.CloneTree();
-            m_Root.Add(container);
+            rootElement.Add(container);
 
             m_PathEditorContainer = container.Q<IMGUIContainer>("path-editor-container");
             m_CompositePartField = container.Q<DropdownField>("composite-part-dropdown");
@@ -40,6 +38,7 @@ namespace UnityEngine.InputSystem.Editor
             var controlPathEditor = new InputControlPathEditor(viewState.selectedBindingPath, new InputControlPickerState(),
                 () => { Dispatch(Commands.ApplyModifiedProperties()); });
 
+            controlPathEditor.SetControlPathsToMatch(viewState.currentControlScheme.deviceRequirements.Select(x => x.controlPath));
             controlPathEditor.SetExpectedControlLayout(viewState.expectedControlLayoutName);
 
             m_PathEditorContainer.onGUIHandler = controlPathEditor.OnGUI;
@@ -59,6 +58,7 @@ namespace UnityEngine.InputSystem.Editor
             public SerializedProperty selectedBindingPath;
             public SerializedInputBinding selectedBinding;
             public IEnumerable<string> compositePartNames;
+            public InputControlScheme currentControlScheme;
             public string expectedControlLayoutName;
             public string selectedCompositePartName;
         }
@@ -78,6 +78,7 @@ namespace UnityEngine.InputSystem.Editor
                 selectedBinding = binding,
                 selectedBindingPath = GetSelectedBindingPath(state),
                 selectedCompositePartName = selectedCompositePartName,
+                currentControlScheme = state.selectedControlScheme,
                 compositePartNames = compositeParts.Select(ObjectNames.NicifyVariableName).ToList(),
                 expectedControlLayoutName = InputBindingComposite.GetExpectedControlLayoutName(binding.compositePath, binding.name) ?? ""
             };

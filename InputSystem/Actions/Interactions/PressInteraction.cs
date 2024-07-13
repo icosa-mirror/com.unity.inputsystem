@@ -218,12 +218,15 @@ namespace UnityEngine.InputSystem.Interactions
             m_PressPointSetting.OnGUI();
         }
 
-#if UNITY_INPUT_SYSTEM_UI_TK_ASSET_EDITOR
+#if UNITY_INPUT_SYSTEM_PROJECT_WIDE_ACTIONS
         public override void OnDrawVisualElements(VisualElement root, Action onChangedCallback)
         {
             root.Add(new HelpBox(s_HelpBoxText.text, HelpBoxMessageType.None));
 
-            var behaviourDropdown = new EnumField(s_PressBehaviorLabel.text, target.behavior);
+            var behaviourDropdown = new EnumField(s_PressBehaviorLabel.text, target.behavior)
+            {
+                tooltip = s_PressBehaviorLabel.tooltip
+            };
             behaviourDropdown.RegisterValueChangedCallback(evt =>
             {
                 target.behavior = (PressBehavior)evt.newValue;

@@ -1,4 +1,4 @@
-#if UNITY_EDITOR && UNITY_INPUT_SYSTEM_UI_TK_ASSET_EDITOR
+#if UNITY_EDITOR && UNITY_INPUT_SYSTEM_PROJECT_WIDE_ACTIONS
 using System;
 using UnityEditor;
 
@@ -12,21 +12,25 @@ namespace UnityEngine.InputSystem.Editor
             // serialized fields and make sure they're present?
             wrappedProperty = serializedProperty ?? throw new ArgumentNullException(nameof(serializedProperty));
 
+            id = serializedProperty.FindPropertyRelative(nameof(InputAction.m_Id)).stringValue;
             name = serializedProperty.FindPropertyRelative(nameof(InputAction.m_Name)).stringValue;
             expectedControlType = ReadExpectedControlType(serializedProperty);
             type = (InputActionType)serializedProperty.FindPropertyRelative(nameof(InputAction.m_Type)).intValue;
             interactions = serializedProperty.FindPropertyRelative(nameof(InputAction.m_Interactions)).stringValue;
             processors = serializedProperty.FindPropertyRelative(nameof(InputAction.m_Processors)).stringValue;
+            propertyPath = wrappedProperty.propertyPath;
             initialStateCheck = ReadInitialStateCheck(serializedProperty);
             actionTypeTooltip = serializedProperty.FindPropertyRelative(nameof(InputAction.m_Type)).GetTooltip();
             expectedControlTypeTooltip = serializedProperty.FindPropertyRelative(nameof(InputAction.m_ExpectedControlType)).GetTooltip();
         }
 
+        public string id { get; }
         public string name { get; }
         public string expectedControlType { get; }
         public InputActionType type { get; }
         public string interactions { get; }
         public string processors { get; }
+        public string propertyPath { get; }
         public bool initialStateCheck { get; }
         public string actionTypeTooltip { get; }
         public string expectedControlTypeTooltip { get; }
@@ -57,7 +61,8 @@ namespace UnityEngine.InputSystem.Editor
                 && processors == other.processors
                 && initialStateCheck == other.initialStateCheck
                 && actionTypeTooltip == other.actionTypeTooltip
-                && expectedControlTypeTooltip == other.expectedControlTypeTooltip;
+                && expectedControlTypeTooltip == other.expectedControlTypeTooltip
+                && propertyPath == other.propertyPath;
         }
 
         public override bool Equals(object obj)
@@ -67,15 +72,17 @@ namespace UnityEngine.InputSystem.Editor
 
         public override int GetHashCode()
         {
-            return HashCode.Combine(
-                name,
-                expectedControlType,
-                (int)type,
-                interactions,
-                processors,
-                initialStateCheck,
-                actionTypeTooltip,
-                expectedControlTypeTooltip);
+            var hashCode = new HashCode();
+            hashCode.Add(name);
+            hashCode.Add(expectedControlType);
+            hashCode.Add((int)type);
+            hashCode.Add(interactions);
+            hashCode.Add(processors);
+            hashCode.Add(initialStateCheck);
+            hashCode.Add(actionTypeTooltip);
+            hashCode.Add(expectedControlTypeTooltip);
+            hashCode.Add(propertyPath);
+            return hashCode.ToHashCode();
         }
     }
 }

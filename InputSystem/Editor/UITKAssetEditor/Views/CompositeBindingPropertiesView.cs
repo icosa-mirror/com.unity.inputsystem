@@ -1,4 +1,4 @@
-#if UNITY_EDITOR && UNITY_INPUT_SYSTEM_UI_TK_ASSET_EDITOR
+#if UNITY_EDITOR && UNITY_INPUT_SYSTEM_PROJECT_WIDE_ACTIONS
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,7 +11,6 @@ namespace UnityEngine.InputSystem.Editor
 {
     internal class CompositeBindingPropertiesView : ViewBase<CompositeBindingPropertiesView.ViewState>
     {
-        private readonly VisualElement m_Root;
         private readonly DropdownField m_CompositeTypeField;
         private EventCallback<ChangeEvent<string>> m_CompositeTypeFieldChangedHandler;
 
@@ -20,12 +19,11 @@ namespace UnityEngine.InputSystem.Editor
             InputActionsEditorConstants.CompositeBindingPropertiesViewUxml;
 
         public CompositeBindingPropertiesView(VisualElement root, StateContainer stateContainer)
-            : base(stateContainer)
+            : base(root, stateContainer)
         {
-            m_Root = root;
             var visualTreeAsset = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(UxmlName);
             var container = visualTreeAsset.CloneTree();
-            m_Root.Add(container);
+            rootElement.Add(container);
 
             m_CompositeTypeField = container.Q<DropdownField>("composite-type-dropdown");
 
@@ -46,7 +44,7 @@ namespace UnityEngine.InputSystem.Editor
             {
                 Dispatch(Commands.UpdatePathNameAndValues(viewState.parameterListView.GetParameters(), viewState.selectedBindingPath));
             };
-            viewState.parameterListView.OnDrawVisualElements(m_Root);
+            viewState.parameterListView.OnDrawVisualElements(rootElement);
         }
 
         public override void DestroyView()

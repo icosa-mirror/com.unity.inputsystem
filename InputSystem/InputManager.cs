@@ -106,6 +106,22 @@ namespace UnityEngine.InputSystem
             }
         }
 
+        #if UNITY_INPUT_SYSTEM_PROJECT_WIDE_ACTIONS
+        public InputActionAsset actions
+        {
+            get
+            {
+                return m_Actions;
+            }
+
+            set
+            {
+                m_Actions = value;
+                ApplyActions();
+            }
+        }
+        #endif
+
         public InputUpdateType updateMask
         {
             get => m_UpdateMask;
@@ -231,6 +247,14 @@ namespace UnityEngine.InputSystem
             add => m_SettingsChangedListeners.AddCallback(value);
             remove => m_SettingsChangedListeners.RemoveCallback(value);
         }
+
+        #if UNITY_INPUT_SYSTEM_PROJECT_WIDE_ACTIONS
+        public event Action onActionsChange
+        {
+            add => m_ActionsChangedListeners.AddCallback(value);
+            remove => m_ActionsChangedListeners.RemoveCallback(value);
+        }
+        #endif
 
         public bool isProcessingEvents => m_InputEventStream.isOpen;
 
@@ -845,69 +869,75 @@ namespace UnityEngine.InputSystem
         ////FIXME: allowing the description to be modified as part of this is surprising; find a better way
         public InternedString TryFindMatchingControlLayout(ref InputDeviceDescription deviceDescription, int deviceId = InputDevice.InvalidDeviceId)
         {
-            Profiler.BeginSample("InputSystem.TryFindMatchingControlLayout");
-            ////TODO: this will want to take overrides into account
-
-            // See if we can match by description.
-            var layoutName = m_Layouts.TryFindMatchingLayout(deviceDescription);
-            if (layoutName.IsEmpty())
+            InternedString layoutName = new InternedString(string.Empty);
+            try
             {
-                // No, so try to match by device class. If we have a "Gamepad" layout,
-                // for example, a device that classifies itself as a "Gamepad" will match
-                // that layout.
-                //
-                // NOTE: Have to make sure here that we get a device layout and not a
-                //       control layout.
-                if (!string.IsNullOrEmpty(deviceDescription.deviceClass))
+                Profiler.BeginSample("InputSystem.TryFindMatchingControlLayout");
+                ////TODO: this will want to take overrides into account
+
+                // See if we can match by description.
+                layoutName = m_Layouts.TryFindMatchingLayout(deviceDescription);
+                if (layoutName.IsEmpty())
                 {
-                    var deviceClassLowerCase = new InternedString(deviceDescription.deviceClass);
-                    var type = m_Layouts.GetControlTypeForLayout(deviceClassLowerCase);
-                    if (type != null && typeof(InputDevice).IsAssignableFrom(type))
-                        layoutName = new InternedString(deviceDescription.deviceClass);
+                    // No, so try to match by device class. If we have a "Gamepad" layout,
+                    // for example, a device that classifies itself as a "Gamepad" will match
+                    // that layout.
+                    //
+                    // NOTE: Have to make sure here that we get a device layout and not a
+                    //       control layout.
+                    if (!string.IsNullOrEmpty(deviceDescription.deviceClass))
+                    {
+                        var deviceClassLowerCase = new InternedString(deviceDescription.deviceClass);
+                        var type = m_Layouts.GetControlTypeForLayout(deviceClassLowerCase);
+                        if (type != null && typeof(InputDevice).IsAssignableFrom(type))
+                            layoutName = new InternedString(deviceDescription.deviceClass);
+                    }
                 }
-            }
 
-            ////REVIEW: listeners registering new layouts from in here may potentially lead to the creation of devices; should we disallow that?
-            ////REVIEW: if a callback picks a layout, should we re-run through the list of callbacks? or should we just remove haveOverridenLayoutName?
-            // Give listeners a shot to select/create a layout.
-            if (m_DeviceFindLayoutCallbacks.length > 0)
-            {
-                // First time we get here, put our delegate for executing device commands
-                // in place. We wrap the call to IInputRuntime.DeviceCommand so that we don't
-                // need to expose the runtime to the onFindLayoutForDevice callbacks.
-                if (m_DeviceFindExecuteCommandDelegate == null)
-                    m_DeviceFindExecuteCommandDelegate =
-                        (ref InputDeviceCommand commandRef) =>
-                    {
-                        if (m_DeviceFindExecuteCommandDeviceId == InputDevice.InvalidDeviceId)
-                            return InputDeviceCommand.GenericFailure;
-                        return m_Runtime.DeviceCommand(m_DeviceFindExecuteCommandDeviceId, ref commandRef);
-                    };
-                m_DeviceFindExecuteCommandDeviceId = deviceId;
-
-                var haveOverriddenLayoutName = false;
-                m_DeviceFindLayoutCallbacks.LockForChanges();
-                for (var i = 0; i < m_DeviceFindLayoutCallbacks.length; ++i)
+                ////REVIEW: listeners registering new layouts from in here may potentially lead to the creation of devices; should we disallow that?
+                ////REVIEW: if a callback picks a layout, should we re-run through the list of callbacks? or should we just remove haveOverridenLayoutName?
+                // Give listeners a shot to select/create a layout.
+                if (m_DeviceFindLayoutCallbacks.length > 0)
                 {
-                    try
-                    {
-                        var newLayout = m_DeviceFindLayoutCallbacks[i](ref deviceDescription, layoutName, m_DeviceFindExecuteCommandDelegate);
-                        if (!string.IsNullOrEmpty(newLayout) && !haveOverriddenLayoutName)
+                    // First time we get here, put our delegate for executing device commands
+                    // in place. We wrap the call to IInputRuntime.DeviceCommand so that we don't
+                    // need to expose the runtime to the onFindLayoutForDevice callbacks.
+                    if (m_DeviceFindExecuteCommandDelegate == null)
+                        m_DeviceFindExecuteCommandDelegate =
+                            (ref InputDeviceCommand commandRef) =>
                         {
-                            layoutName = new InternedString(newLayout);
-                            haveOverriddenLayoutName = true;
+                            if (m_DeviceFindExecuteCommandDeviceId == InputDevice.InvalidDeviceId)
+                                return InputDeviceCommand.GenericFailure;
+                            return m_Runtime.DeviceCommand(m_DeviceFindExecuteCommandDeviceId, ref commandRef);
+                        };
+                    m_DeviceFindExecuteCommandDeviceId = deviceId;
+
+                    var haveOverriddenLayoutName = false;
+                    m_DeviceFindLayoutCallbacks.LockForChanges();
+                    for (var i = 0; i < m_DeviceFindLayoutCallbacks.length; ++i)
+                    {
+                        try
+                        {
+                            var newLayout = m_DeviceFindLayoutCallbacks[i](ref deviceDescription, layoutName, m_DeviceFindExecuteCommandDelegate);
+                            if (!string.IsNullOrEmpty(newLayout) && !haveOverriddenLayoutName)
+                            {
+                                layoutName = new InternedString(newLayout);
+                                haveOverriddenLayoutName = true;
+                            }
+                        }
+                        catch (Exception exception)
+                        {
+                            Debug.LogError($"{exception.GetType().Name} while executing 'InputSystem.onFindLayoutForDevice' callbacks");
+                            Debug.LogException(exception);
                         }
                     }
-                    catch (Exception exception)
-                    {
-                        Debug.LogError($"{exception.GetType().Name} while executing 'InputSystem.onFindLayoutForDevice' callbacks");
-                        Debug.LogException(exception);
-                    }
+                    m_DeviceFindLayoutCallbacks.UnlockForChanges();
                 }
-                m_DeviceFindLayoutCallbacks.UnlockForChanges();
             }
-
-            Profiler.EndSample();
+            finally
+            {
+                Profiler.EndSample();
+            }
             return layoutName;
         }
 
@@ -1259,7 +1289,10 @@ namespace UnityEngine.InputSystem
             if (layout.IsEmpty())
             {
                 if (throwIfNoLayoutFound)
+                {
+                    Profiler.EndSample();
                     throw new ArgumentException($"Cannot find layout matching device description '{description}'", nameof(description));
+                }
 
                 // If it's a device coming from the runtime, disable it.
                 if (deviceId != InputDevice.InvalidDeviceId)
@@ -1741,11 +1774,17 @@ namespace UnityEngine.InputSystem
 
             m_Settings = settings;
 
+#if UNITY_INPUT_SYSTEM_PROJECT_WIDE_ACTIONS
+            InitializeActions();
+#endif // UNITY_INPUT_SYSTEM_PROJECT_WIDE_ACTIONS
             InitializeData();
             InstallRuntime(runtime);
             InstallGlobals();
 
             ApplySettings();
+            #if UNITY_INPUT_SYSTEM_PROJECT_WIDE_ACTIONS
+            ApplyActions();
+            #endif
         }
 
         internal void Destroy()
@@ -1765,7 +1804,33 @@ namespace UnityEngine.InputSystem
             // Destroy settings if they are temporary.
             if (m_Settings != null && m_Settings.hideFlags == HideFlags.HideAndDontSave)
                 Object.DestroyImmediate(m_Settings);
+
+            // Project-wide Actions are never temporary so we do not destroy them.
         }
+
+#if UNITY_INPUT_SYSTEM_PROJECT_WIDE_ACTIONS
+        // Initialize project-wide actions:
+        // - In editor (edit mode or play-mode) we always use the editor build preferences persisted setting.
+        // - In player build we always attempt to find a preloaded asset.
+        private void InitializeActions()
+        {
+#if UNITY_EDITOR
+            m_Actions = ProjectWideActionsBuildProvider.actionsToIncludeInPlayerBuild;
+#else
+            m_Actions = null;
+            var candidates = Resources.FindObjectsOfTypeAll<InputActionAsset>();
+            foreach (var candidate in candidates)
+            {
+                if (candidate.m_IsProjectWide)
+                {
+                    m_Actions = candidate;
+                    break;
+                }
+            }
+#endif // UNITY_EDITOR
+        }
+
+#endif // UNITY_INPUT_SYSTEM_PROJECT_WIDE_ACTIONS
 
         internal void InitializeData()
         {
@@ -2019,6 +2084,9 @@ namespace UnityEngine.InputSystem
         private CallbackArray<UpdateListener> m_BeforeUpdateListeners;
         private CallbackArray<UpdateListener> m_AfterUpdateListeners;
         private CallbackArray<Action> m_SettingsChangedListeners;
+        #if UNITY_INPUT_SYSTEM_PROJECT_WIDE_ACTIONS
+        private CallbackArray<Action> m_ActionsChangedListeners;
+        #endif
         private bool m_NativeBeforeUpdateHooked;
         private bool m_HaveDevicesWithStateCallbackReceivers;
         private bool m_HasFocus;
@@ -2047,6 +2115,9 @@ namespace UnityEngine.InputSystem
         internal IInputRuntime m_Runtime;
         internal InputMetrics m_Metrics;
         internal InputSettings m_Settings;
+        #if UNITY_INPUT_SYSTEM_PROJECT_WIDE_ACTIONS
+        private InputActionAsset m_Actions;
+        #endif
 
         #if UNITY_EDITOR
         internal IInputDiagnostics m_Diagnostics;
@@ -2602,6 +2673,15 @@ namespace UnityEngine.InputSystem
                 "InputSystem.onSettingsChange");
         }
 
+        #if UNITY_INPUT_SYSTEM_PROJECT_WIDE_ACTIONS
+        internal void ApplyActions()
+        {
+            // Let listeners know.
+            DelegateHelpers.InvokeCallbacksSafe(ref m_ActionsChangedListeners, "InputSystem.onActionsChange");
+        }
+
+        #endif
+
         internal unsafe long ExecuteGlobalCommand<TCommand>(ref TCommand command)
             where TCommand : struct, IInputDeviceCommandInfo
         {
@@ -2677,9 +2757,7 @@ namespace UnityEngine.InputSystem
                 m_HasFocus = focus;
                 return;
             }
-            #endif
 
-            #if UNITY_EDITOR
             var gameViewFocus = m_Settings.editorInputBehaviorInPlayMode;
             #endif
 
@@ -2844,7 +2922,10 @@ namespace UnityEngine.InputSystem
             Profiler.BeginSample("InputUpdate");
 
             if (m_InputEventStream.isOpen)
+            {
+                Profiler.EndSample();
                 throw new InvalidOperationException("Already have an event buffer set! Was OnUpdate() called recursively?");
+            }
 
             // Restore devices before checking update mask. See InputSystem.RunInitialUpdate().
             RestoreDevicesAfterDomainReloadIfNecessary();
@@ -2922,22 +3003,21 @@ namespace UnityEngine.InputSystem
             var canEarlyOut =
                 // Early out if there's no events to process.
                 eventBuffer.eventCount == 0
-                || canFlushBuffer ||
+                || canFlushBuffer
+
+#if UNITY_EDITOR
                 // If we're in the background and not supposed to process events in this update (but somehow
                 // still ended up here), we're done.
-                ((!gameHasFocus || gameShouldGetInputRegardlessOfFocus) &&
+                || ((!gameHasFocus || gameShouldGetInputRegardlessOfFocus) &&
                     ((m_Settings.backgroundBehavior == InputSettings.BackgroundBehavior.ResetAndDisableAllDevices && updateType != InputUpdateType.Editor)
-#if UNITY_EDITOR
                         || (m_Settings.editorInputBehaviorInPlayMode == InputSettings.EditorInputBehaviorInPlayMode.AllDevicesRespectGameViewFocus && updateType != InputUpdateType.Editor)
                         || (m_Settings.backgroundBehavior == InputSettings.BackgroundBehavior.IgnoreFocus && m_Settings.editorInputBehaviorInPlayMode == InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView && updateType == InputUpdateType.Editor)
-#endif
                     )
-#if UNITY_EDITOR
                     // When the game is playing and has focus, we never process input in editor updates. All we
                     // do is just switch to editor state buffers and then exit.
-                    || (gameIsPlaying && gameHasFocus && updateType == InputUpdateType.Editor)
+                    || (gameIsPlaying && gameHasFocus && updateType == InputUpdateType.Editor))
 #endif
-                );
+            ;
 
 
 #if UNITY_EDITOR
@@ -3112,7 +3192,7 @@ namespace UnityEngine.InputSystem
                             }
                         }
                     }
-                    #endif
+#endif
 
                     // If device is disabled, we let the event through only in certain cases.
                     // Removal and configuration change events should always be processed.
@@ -3205,7 +3285,10 @@ namespace UnityEngine.InputSystem
                         var shouldProcess = ((IEventPreProcessor)device).PreProcessEvent(currentEventReadPtr);
 #if UNITY_EDITOR
                         if (currentEventReadPtr->sizeInBytes > eventSizeBeforePreProcessor)
+                        {
+                            Profiler.EndSample();
                             throw new AccessViolationException($"'{device}'.PreProcessEvent tries to grow an event from {eventSizeBeforePreProcessor} bytes to {currentEventReadPtr->sizeInBytes} bytes, this will potentially corrupt events after the current event and/or cause out-of-bounds memory access.");
+                        }
 #endif
                         if (!shouldProcess)
                         {
@@ -3260,6 +3343,14 @@ namespace UnityEngine.InputSystem
                             {
 #if UNITY_EDITOR
                                 m_Diagnostics?.OnEventTimestampOutdated(new InputEventPtr(currentEventReadPtr), device);
+#elif UNITY_ANDROID
+                                // Android keyboards can send events out of order: Holding down a key will send multiple
+                                // presses after a short time, like on most platforms. Unfortunately, on Android, the
+                                // last of these "presses" can be timestamped to be after the event of the key release.
+                                // If that happens, we'd skip the keyUp here, and the device state will have the key
+                                // "stuck" pressed. So, special case here to not skip keyboard events on Android. ISXB-475
+                                // N.B. Android seems to have similar issues with touch input (OnStateEvent, Touchscreen.cs)
+                                if (!(device is Keyboard))
 #endif
                                 break;
                             }
@@ -3386,6 +3477,7 @@ namespace UnityEngine.InputSystem
             {
                 // We need to restore m_InputEventStream to a sound state
                 // to avoid failing recursive OnUpdate check next frame.
+                Profiler.EndSample();
                 m_InputEventStream.CleanUpAfterException();
                 throw;
             }
@@ -3701,6 +3793,7 @@ namespace UnityEngine.InputSystem
             public InputUpdateType updateMask;
             public InputMetrics metrics;
             public InputSettings settings;
+            public InputActionAsset actions;
 
             #if UNITY_ANALYTICS || UNITY_EDITOR
             public bool haveSentStartupAnalytics;
@@ -3744,6 +3837,9 @@ namespace UnityEngine.InputSystem
                 updateMask = m_UpdateMask,
                 metrics = m_Metrics,
                 settings = m_Settings,
+                #if UNITY_INPUT_SYSTEM_PROJECT_WIDE_ACTIONS
+                actions = m_Actions,
+                #endif
 
                 #if UNITY_ANALYTICS || UNITY_EDITOR
                 haveSentStartupAnalytics = m_HaveSentStartupAnalytics,
@@ -3762,6 +3858,12 @@ namespace UnityEngine.InputSystem
             if (m_Settings != null)
                 Object.DestroyImmediate(m_Settings);
             m_Settings = state.settings;
+
+            #if UNITY_INPUT_SYSTEM_PROJECT_WIDE_ACTIONS
+            // Note that we just reassign actions and never destroy them since always mapped to persisted asset
+            // and hence ownership lies with ADB.
+            m_Actions = state.actions;
+            #endif
 
             #if UNITY_ANALYTICS || UNITY_EDITOR
             m_HaveSentStartupAnalytics = state.haveSentStartupAnalytics;
